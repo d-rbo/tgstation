@@ -16,14 +16,14 @@ COPY BYOND/ /usr/local/byond/
 # Добавляем в PATH
 ENV PATH="/usr/local/byond/bin:${PATH}"
 
-# Устанавливаем BYOND (если нужна установка)
-RUN cd /usr/local/byond && make install
+# Даем права на выполнение для BYOND
+RUN chmod +x /usr/local/byond/bin/*
 
 # Копирование кода игры
 WORKDIR /tgstation
 COPY . .
 
-# Компиляция проекта
+# Компиляция проекта через BUILD.cmd
 RUN chmod +x BUILD.cmd && ./BUILD.cmd
 
 # Запуск сервера
