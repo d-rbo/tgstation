@@ -38,7 +38,9 @@ RUN mkdir -p config && \
 RUN DreamMaker tgstation.dme || echo "Compilation failed, but continuing..."
 
 # Открываем порт (Railway автоматически назначит)
-EXPOSE $PORT
+EXPOSE $PORT  
+
+# Updated for Railway
 
 # Запуск сервера
 CMD DreamDaemon tgstation.dmb -port ${PORT:-1337} -trusted -close -verbose
