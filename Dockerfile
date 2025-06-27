@@ -14,12 +14,19 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Установка BYOND
-RUN wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" \
-    && unzip byond.zip \
-    && mv byond /usr/local/byond \
-    && chmod +x /usr/local/byond/bin/* \
-    && rm byond.zip
+# Копирование проекта (включая BYOND)
+COPY . /app
+WORKDIR /app
+
+# Настройка BYOND из локальной папки
+RUN if [ -d "BYOND" ]; then \
+        echo "Using local BYOND from project" && \
+        cp -r BYOND /usr/local/byond && \
+        chmod +x /usr/local/byond/bin/*; \
+    else \
+        echo "ERROR: BYOND directory not found in project"; \
+        exit 1; \
+    fi
 
 # Настройка PATH
 ENV PATH="/usr/local/byond/bin:${PATH}"
