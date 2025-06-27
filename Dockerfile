@@ -10,37 +10,24 @@ RUN apt-get update && apt-get install -y \
     libc6-i386 \
     && rm -rf /var/lib/apt/lists/*
 
-# Установка BYOND
-WORKDIR /tmp
-RUN wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" \
+# Скачивание и установка BYOND
+ENV BYOND_MAJOR=515
+ENV BYOND_MINOR=1637
+WORKDIR /byond
+RUN wget "http://www.byond.com/download/build/${BYOND_MAJOR}/${BYOND_MAJOR}.${BYOND_MINOR}_byond_linux.zip" -O byond.zip \
     && unzip byond.zip \
-    && mv byond /opt/byond \
-    && chmod +x /opt/byond/bin/* \
-    && ln -s /opt/byond/bin/DreamMaker /usr/local/bin/DreamMaker \
-    && ln -s /opt/byond/bin/DreamDaemon /usr/local/bin/DreamDaemon \
-    && rm byond.zip
+    && cd byond \
+    && make install \
+    && cd .. \
+    && rm -rf byond byond.zip
 
-# Создание директории для игры
+# Копирование кода игры
 WORKDIR /tgstation
-
-# Копирование всех файлов проекта
 COPY . .
 
-# Создание простого конфига (отключаем тяжелые модули)
-RUN mkdir -p config && \
-    echo "MINING_ENABLED 0" > config/game_options.txt && \
-    echo "LAVALAND_ENABLED 0" >> config/game_options.txt && \
-    echo "MINING_RUINS_ENABLED 0" >> config/game_options.txt && \
-    echo "SPACE_RUINS_ENABLED 0" >> config/game_options.txt && \
-    echo "ATMOSPHERIC_PROCESSING 0" >> config/game_options.txt
-
-# Попытка компиляции (может не сработать без rust-g)
-RUN DreamMaker tgstation.dme || echo "Compilation failed, but continuing..."
-
-# Открываем порт (Railway автоматически назначит)
-EXPOSE $PORT  
-
-# Updated for Railway
+# Компиляция проекта (упрощенная)
+RUN env DM_EXE=/usr/local/byond/bin/dm DreamMaker tgstation.dme
 
 # Запуск сервера
-CMD DreamDaemon tgstation.dmb -port ${PORT:-1337} -trusted -close -verbose
+ENTRYPOINT ["/usr/local/byond/bin/DreamDaemon", "tgstation.dmb", "-port", "1337", "-trusted", "-close"]
+EXPOSE 1337
