@@ -80,6 +80,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
 # Install bun (required for tgui build)
 RUN curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
+
+# Debug GLIBC version
+RUN echo "=== GLIBC VERSION CHECK ===" && \
+    ldd --version && \
+    ls -la /lib/x86_64-linux-gnu/libc.so.6 && \
+    /lib/x86_64-linux-gnu/libc.so.6 2>&1 | head -5 || echo "GLIBC check failed"
     
 # Проверяем Node.js версию
 RUN echo "=== NODE.JS VERSION ===" && node --version
