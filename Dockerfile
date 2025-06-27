@@ -73,6 +73,14 @@ RUN echo "=== BYOND INSTALLATION CHECK ===" && \
 RUN echo "=== BYOND VERSION ===" && \
     find /usr/local -name "dm" -type f -exec {} -version \; 2>/dev/null || echo "DM not working"
 
+# Install Node.js 18+ for ?? operator support
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs
+
+# Install bun (required for tgui build)
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+    
 # Проверяем Node.js версию
 RUN echo "=== NODE.JS VERSION ===" && node --version
 
