@@ -1,0 +1,3 @@
+# Отключаем автоматический поиск package.json в Railway
+node_modules/
+package*.json
