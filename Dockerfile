@@ -24,7 +24,7 @@ WORKDIR /tgstation
 COPY . .
 
 # Компиляция проекта
-RUN env DM_EXE=/usr/local/byond/bin/dm DreamMaker tgstation.dme
+RUN chmod +x BUILD.cmd && ./BUILD.cmd
 
 # Запуск сервера
 ENTRYPOINT ["/usr/local/byond/bin/DreamDaemon", "tgstation.dmb", "-port", "1337", "-trusted", "-close"]
