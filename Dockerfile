@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем BYOND из локальной папки
-COPY byond/ /usr/local/byond/
+COPY BYOND/ /usr/local/byond/
 
 # Добавляем в PATH
 ENV PATH="/usr/local/byond/bin:${PATH}"
