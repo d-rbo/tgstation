@@ -17,26 +17,61 @@ WORKDIR /app
 # Копируем весь проект
 COPY . .
 
-# Устанавливаем BYOND из локальной папки
+# Диагностика структуры BYOND папки
+RUN echo "=== BYOND DIRECTORY STRUCTURE ===" && \
+    if [ -d "BYOND" ]; then \
+        echo "BYOND directory exists" && \
+        find BYOND -type f -name "*" | head -20 && \
+        echo "--- Full BYOND structure ---" && \
+        ls -la BYOND/ && \
+        if [ -d "BYOND/byond" ]; then \
+            echo "Found BYOND/byond subdirectory" && \
+            ls -la BYOND/byond/; \
+        fi; \
+    else \
+        echo "BYOND directory not found"; \
+    fi
+
+# Устанавливаем BYOND с правильной логикой
 RUN echo "=== INSTALLING BYOND ===" && \
     if [ -d "BYOND" ]; then \
         echo "Found local BYOND directory" && \
-        cp -r BYOND/* /usr/local/ && \
-        chmod +x /usr/local/byond/bin/* && \
+        if [ -d "BYOND/byond" ]; then \
+            echo "Installing from BYOND/byond/" && \
+            cp -r BYOND/byond /usr/local/byond; \
+        elif [ -d "BYOND/bin" ]; then \
+            echo "Installing from BYOND/ (direct structure)" && \
+            mkdir -p /usr/local/byond && \
+            cp -r BYOND/* /usr/local/byond/; \
+        else \
+            echo "Installing from BYOND/ (copying all)" && \
+            cp -r BYOND /usr/local/byond; \
+        fi && \
+        echo "Making binaries executable..." && \
+        find /usr/local/byond -name "dm" -type f -exec chmod +x {} \; && \
+        find /usr/local/byond -name "dreamdaemon" -type f -exec chmod +x {} \; && \
+        find /usr/local/byond -name "DreamMaker" -type f -exec chmod +x {} \; && \
+        find /usr/local/byond -type f -executable -exec chmod +x {} \; && \
         echo "BYOND installed from local directory"; \
     else \
         echo "No local BYOND found, downloading..." && \
         wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" && \
         unzip -q byond.zip && \
         mv byond /usr/local/byond && \
-        chmod +x /usr/local/byond/bin/* && \
+        find /usr/local/byond -type f -executable -exec chmod +x {} \; && \
         rm byond.zip && \
         echo "BYOND downloaded and installed"; \
     fi
 
+# Диагностика установки BYOND
+RUN echo "=== BYOND INSTALLATION CHECK ===" && \
+    find /usr/local/byond -name "dm" -type f 2>/dev/null || echo "dm not found" && \
+    find /usr/local/byond -name "dreamdaemon" -type f 2>/dev/null || echo "dreamdaemon not found" && \
+    ls -la /usr/local/byond/bin/ 2>/dev/null || echo "No /usr/local/byond/bin directory"
+
 # Проверяем установку BYOND
 RUN echo "=== BYOND VERSION ===" && \
-    /usr/local/byond/bin/dm -version 2>/dev/null || echo "DM not found"
+    find /usr/local -name "dm" -type f -exec {} -version \; 2>/dev/null || echo "DM not working"
 
 # Проверяем Node.js версию
 RUN echo "=== NODE.JS VERSION ===" && node --version
@@ -45,6 +80,14 @@ RUN echo "=== NODE.JS VERSION ===" && node --version
 RUN echo "=== TOOLS DIRECTORY ===" && ls -la tools/ 2>/dev/null || echo "No tools directory"
 RUN echo "=== TOOLS/BUILD DIRECTORY ===" && ls -la tools/build/ 2>/dev/null || echo "No tools/build directory"
 RUN echo "=== TOOLS/BOOTSTRAP DIRECTORY ===" && ls -la tools/bootstrap/ 2>/dev/null || echo "No tools/bootstrap directory"
+
+# Исправляем синтаксис JavaScript для совместимости
+RUN if [ -f "tools/build/lib/byond.js" ]; then \
+        echo "=== FIXING JAVASCRIPT SYNTAX ===" && \
+        sed -i 's/?? \[\]/|| []/g' tools/build/lib/byond.js && \
+        sed -i 's/?? /|| /g' tools/build/lib/byond.js && \
+        echo "JavaScript syntax fixed"; \
+    fi
 
 # Выполняем сборку проекта
 RUN if [ -f "tools/bootstrap/javascript" ]; then \
@@ -63,8 +106,15 @@ RUN if [ -f "tools/bootstrap/javascript" ]; then \
         tools/build/build 2>&1 || echo "ERROR in build script"; \
     else \
         echo "=== NO BUILD SCRIPTS FOUND, USING DM FALLBACK ===" && \
-        echo "Executing: /usr/local/byond/bin/dm tgstation.dme" && \
-        /usr/local/byond/bin/dm tgstation.dme 2>&1 || echo "ERROR in dm compilation"; \
+        echo "Looking for dm binary..." && \
+        DM_PATH=$(find /usr/local -name "dm" -type f 2>/dev/null | head -1) && \
+        if [ -n "$DM_PATH" ]; then \
+            echo "Found dm at: $DM_PATH" && \
+            echo "Executing: $DM_PATH tgstation.dme" && \
+            $DM_PATH tgstation.dme 2>&1 || echo "ERROR in dm compilation"; \
+        else \
+            echo "ERROR: dm binary not found anywhere"; \
+        fi; \
     fi
 
 # Проверяем результат сборки
@@ -78,5 +128,5 @@ ENV PATH="/usr/local/byond/bin:${PATH}"
 # Открываем порты
 EXPOSE 1337
 
-# Команда запуска
-CMD ["sh", "-c", "echo 'Starting SS13 server...' && if [ -f 'tgstation.dmb' ]; then echo 'Found tgstation.dmb, starting server...' && /usr/local/byond/bin/dreamdaemon tgstation.dmb -port 1337 -trusted -verbose; else echo 'ERROR: tgstation.dmb not found' && ls -la *.dmb 2>/dev/null && exit 1; fi"]
+# Команда запуска с поиском dreamdaemon
+CMD ["sh", "-c", "echo 'Starting SS13 server...' && if [ -f 'tgstation.dmb' ]; then echo 'Found tgstation.dmb, starting server...' && DAEMON_PATH=$(find /usr/local -name 'dreamdaemon' -type f 2>/dev/null | head -1) && if [ -n \"$DAEMON_PATH\" ]; then echo \"Using dreamdaemon at: $DAEMON_PATH\" && $DAEMON_PATH tgstation.dmb -port 1337 -trusted -verbose; else echo 'ERROR: dreamdaemon not found' && exit 1; fi; else echo 'ERROR: tgstation.dmb not found' && ls -la *.dmb 2>/dev/null && exit 1; fi"]
