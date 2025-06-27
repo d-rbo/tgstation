@@ -1,47 +1,52 @@
-# Простой Dockerfile для SS13 на Railway
-FROM ubuntu:22.04
+# Используем более новый образ с Node.js 18
+FROM node:18-bullseye
 
-# Установка базовых зависимостей + Node.js для JavaScript
+# Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
-    lib32gcc-s1 \
-    lib32stdc++6 \
-    libc6-i386 \
-    make \
-    python3 \
-    nodejs \
-    npm \
+    libssl1.1 \
+    gcc \
+    g++ \
+    libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Копирование проекта (включая BYOND)
-COPY . /app
+# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Настройка BYOND из локальной папки
-RUN if [ -d "BYOND" ]; then \
-        echo "Using local BYOND from project" && \
-        cp -r BYOND /usr/local/byond && \
-        chmod +x /usr/local/byond/bin/*; \
+# Копируем весь проект
+COPY . .
+
+# Устанавливаем BYOND из локальной папки
+RUN echo "=== INSTALLING BYOND ===" && \
+    if [ -d "BYOND" ]; then \
+        echo "Found local BYOND directory" && \
+        cp -r BYOND/* /usr/local/ && \
+        chmod +x /usr/local/byond/bin/* && \
+        echo "BYOND installed from local directory"; \
     else \
-        echo "ERROR: BYOND directory not found in project"; \
-        exit 1; \
+        echo "No local BYOND found, downloading..." && \
+        wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" && \
+        unzip -q byond.zip && \
+        mv byond /usr/local/byond && \
+        chmod +x /usr/local/byond/bin/* && \
+        rm byond.zip && \
+        echo "BYOND downloaded and installed"; \
     fi
 
-# Настройка PATH
-ENV PATH="/usr/local/byond/bin:${PATH}"
+# Проверяем установку BYOND
+RUN echo "=== BYOND VERSION ===" && \
+    /usr/local/byond/bin/dm -version 2>/dev/null || echo "DM not found"
 
-# Копирование проекта
-COPY . /app
-WORKDIR /app
+# Проверяем Node.js версию
+RUN echo "=== NODE.JS VERSION ===" && node --version
 
-# ОТЛАДКА - смотрим что у нас есть
-RUN echo "=== ROOT DIRECTORY ===" && ls -la
+# Выводим содержимое tools директории для отладки
 RUN echo "=== TOOLS DIRECTORY ===" && ls -la tools/ 2>/dev/null || echo "No tools directory"
 RUN echo "=== TOOLS/BUILD DIRECTORY ===" && ls -la tools/build/ 2>/dev/null || echo "No tools/build directory"
 RUN echo "=== TOOLS/BOOTSTRAP DIRECTORY ===" && ls -la tools/bootstrap/ 2>/dev/null || echo "No tools/bootstrap directory"
 
-# Проверяем какие файлы найдены и выполняем с отладкой
+# Выполняем сборку проекта
 RUN if [ -f "tools/bootstrap/javascript" ]; then \
         echo "=== FOUND: tools/bootstrap/javascript ===" && \
         chmod +x tools/bootstrap/javascript && \
@@ -62,6 +67,16 @@ RUN if [ -f "tools/bootstrap/javascript" ]; then \
         /usr/local/byond/bin/dm tgstation.dme 2>&1 || echo "ERROR in dm compilation"; \
     fi
 
-# Запуск сервера
+# Проверяем результат сборки
+RUN echo "=== BUILD RESULTS ===" && \
+    ls -la *.dmb 2>/dev/null || echo "No .dmb files found" && \
+    ls -la *.rsc 2>/dev/null || echo "No .rsc files found"
+
+# Настраиваем переменные окружения
+ENV PATH="/usr/local/byond/bin:${PATH}"
+
+# Открываем порты
 EXPOSE 1337
-CMD ["/usr/local/byond/bin/dreamdaemon", "tgstation.dmb", "1337", "-trusted"]
+
+# Команда запуска
+CMD ["sh", "-c", "echo 'Starting SS13 server...' && if [ -f 'tgstation.dmb' ]; then echo 'Found tgstation.dmb, starting server...' && /usr/local/byond/bin/dreamdaemon tgstation.dmb -port 1337 -trusted -verbose; else echo 'ERROR: tgstation.dmb not found' && ls -la *.dmb 2>/dev/null && exit 1; fi"]
