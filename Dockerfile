@@ -3,6 +3,7 @@ FROM ubuntu:22.04
 
 # Установка базовых зависимостей + Node.js для JavaScript
 RUN apt-get update && apt-get install -y \
+    wget \
     unzip \
     lib32gcc-s1 \
     lib32stdc++6 \
@@ -13,33 +14,47 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем BYOND из локальной папки
-COPY BYOND/ /usr/local/byond/
+# Установка BYOND
+RUN wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" \
+    && unzip byond.zip \
+    && mv byond /usr/local/byond \
+    && chmod +x /usr/local/byond/bin/* \
+    && rm byond.zip
 
-# Добавляем в PATH
+# Настройка PATH
 ENV PATH="/usr/local/byond/bin:${PATH}"
 
-# Даем права на выполнение для BYOND
-RUN chmod +x /usr/local/byond/bin/*
+# Копирование проекта
+COPY . /app
+WORKDIR /app
 
-# Копирование кода игры
-WORKDIR /tgstation
-COPY . .
+# ОТЛАДКА - смотрим что у нас есть
+RUN echo "=== ROOT DIRECTORY ===" && ls -la
+RUN echo "=== TOOLS DIRECTORY ===" && ls -la tools/ 2>/dev/null || echo "No tools directory"
+RUN echo "=== TOOLS/BUILD DIRECTORY ===" && ls -la tools/build/ 2>/dev/null || echo "No tools/build directory"
+RUN echo "=== TOOLS/BOOTSTRAP DIRECTORY ===" && ls -la tools/bootstrap/ 2>/dev/null || echo "No tools/bootstrap directory"
 
-# Проверяем структуру и запускаем правильную сборку
-RUN ls -la tools/build/ && ls -la tools/bootstrap/ 2>/dev/null || echo "No bootstrap directory"
-
-# Сборка через JavaScript (аналог build.bat)
+# Проверяем какие файлы найдены и выполняем с отладкой
 RUN if [ -f "tools/bootstrap/javascript" ]; then \
-        echo "Using Linux bootstrap" && chmod +x tools/bootstrap/javascript && tools/bootstrap/javascript tools/build/build.js; \
+        echo "=== FOUND: tools/bootstrap/javascript ===" && \
+        chmod +x tools/bootstrap/javascript && \
+        echo "Executing: tools/bootstrap/javascript tools/build/build.js" && \
+        tools/bootstrap/javascript tools/build/build.js 2>&1 || echo "ERROR in bootstrap/javascript"; \
     elif [ -f "tools/build/build.js" ]; then \
-        echo "Running build.js directly with node" && node tools/build/build.js; \
+        echo "=== FOUND: tools/build/build.js ===" && \
+        echo "Executing: node tools/build/build.js" && \
+        node tools/build/build.js 2>&1 || echo "ERROR in build.js"; \
     elif [ -f "tools/build/build" ]; then \
-        echo "Using Linux build script" && chmod +x tools/build/build && tools/build/build; \
+        echo "=== FOUND: tools/build/build ===" && \
+        chmod +x tools/build/build && \
+        echo "Executing: tools/build/build" && \
+        tools/build/build 2>&1 || echo "ERROR in build script"; \
     else \
-        echo "Fallback to dm compilation" && /usr/local/byond/bin/dm tgstation.dme; \
+        echo "=== NO BUILD SCRIPTS FOUND, USING DM FALLBACK ===" && \
+        echo "Executing: /usr/local/byond/bin/dm tgstation.dme" && \
+        /usr/local/byond/bin/dm tgstation.dme 2>&1 || echo "ERROR in dm compilation"; \
     fi
 
 # Запуск сервера
-ENTRYPOINT ["/usr/local/byond/bin/DreamDaemon", "tgstation.dmb", "-port", "1337", "-trusted", "-close"]
 EXPOSE 1337
+CMD ["/usr/local/byond/bin/dreamdaemon", "tgstation.dmb", "1337", "-trusted"]
