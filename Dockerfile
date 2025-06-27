@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     lib32stdc++6 \
     libc6-i386 \
     make \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем BYOND из локальной папки
@@ -23,8 +24,14 @@ RUN chmod +x /usr/local/byond/bin/*
 WORKDIR /tgstation
 COPY . .
 
-# Компиляция проекта через BUILD.cmd
-RUN chmod +x BUILD.cmd && ./BUILD.cmd
+# Компиляция проекта - используем прямую компиляцию вместо BUILD.cmd
+RUN if [ -f "tools/build/build" ]; then \
+        chmod +x tools/build/build && ./tools/build/build; \
+    elif [ -f "tools/build/build.py" ]; then \
+        python3 tools/build/build.py; \
+    else \
+        /usr/local/byond/bin/dm tgstation.dme; \
+    fi
 
 # Запуск сервера
 ENTRYPOINT ["/usr/local/byond/bin/DreamDaemon", "tgstation.dmb", "-port", "1337", "-trusted", "-close"]
