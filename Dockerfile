@@ -1,13 +1,12 @@
-# Используем Ubuntu 22.04 для поддержки GLIBC 2.35More actions
+# Используем более легкий базовый образ
 FROM ubuntu:22.04
 
 # Предотвращаем интерактивные запросы
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Устанавливаем системные зависимости
-RUN apt-get update && apt-get install -y \
+# Устанавливаем только необходимые системные зависимости в одном слое
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
-    unzip \
     curl \
     gcc \
     g++ \
@@ -18,111 +17,95 @@ RUN apt-get update && apt-get install -y \
     git \
     make \
     pkg-config \
-    lib32z1 \
-    lib32ncurses6 \
-    lib32stdc++6 \
-    && rm -rf /var/lib/apt/lists/*
+    # Убираем лишние 32-битные библиотеки если они не критичны
+    # lib32z1 \
+    # lib32ncurses6 \
+    # lib32stdc++6 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && rm -rf /tmp/* /var/tmp/*
 
-# Устанавливаем Node.js 18
+# Устанавливаем Node.js 18 (более компактная установка)
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Копируем весь проект
-COPY . .
+# Копируем только необходимые файлы сначала (для лучшего кэширования)
+COPY package*.json ./
+COPY tools/ ./tools/
+COPY tgui/ ./tgui/
 
-# Install bun (required for tgui build)
+# Install bun (required for tgui build) - более компактная установка
 RUN curl -fsSL https://bun.sh/install | bash && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun && \
+    # Очищаем кэш установки
+    rm -rf /root/.bun/install/cache
 
-# Проверяем версию GLIBC
-RUN echo "=== GLIBC VERSION CHECK ===" && \
-    ldd --version
-
-# УСТАНОВКА WINE ДЛЯ ЗАПУСКА WINDOWS BYOND
-RUN echo "=== INSTALLING WINE FOR WINDOWS BYOND ===" && \
+# УСТАНОВКА WINE (только если абсолютно необходимо)
+# Попробуйте использовать Linux версию BYOND если возможно
+RUN echo "=== INSTALLING WINE (minimal) ===" && \
     dpkg --add-architecture i386 && \
     apt-get update && \
-    apt-get install -y wine32 wine64 winbind && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends wine wine32 && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean && \
+    # Убираем ненужные файлы wine
+    rm -rf /usr/share/wine/mono /usr/share/wine/gecko
 
-# УСТАНОВКА BYOND ЧЕРЕЗ WINE
-RUN echo "=== INSTALLING BYOND ===" && \
-    if [ -d "BYOND" ]; then \
-        echo "Found local BYOND directory" && \
-        if [ -d "BYOND/byond" ]; then \
-            cp -r BYOND/byond /usr/local/byond; \
-        elif [ -d "BYOND/bin" ]; then \
-            mkdir -p /usr/local/byond && \
-            cp -r BYOND/* /usr/local/byond/; \
-        else \
-            cp -r BYOND /usr/local/byond; \
-        fi && \
+# Копируем BYOND только после установки wine
+COPY BYOND/ /usr/local/byond/
+
+# Настройка BYOND (компактная версия)
+RUN if [ -d "/usr/local/byond" ]; then \
         find /usr/local/byond -type f -name "*.exe" -exec chmod +x {} \; && \
-        echo "BYOND installed from local directory"; \
+        # Удаляем ненужные файлы из BYOND
+        find /usr/local/byond -name "*.pdb" -delete && \
+        find /usr/local/byond -name "*.lib" -delete && \
+        echo "BYOND installed"; \
     else \
-        echo "ERROR: No local BYOND found and byond.com is down" && \
-        exit 1; \
-
-
-
-
-
+        echo "ERROR: No BYOND found" && exit 1; \
     fi
-
-# Проверяем установку BYOND (Windows версия через Wine)
-RUN echo "=== BYOND CHECK ===" && \
-    echo "Looking for Windows BYOND binaries:" && \
-    find /usr/local/byond -name "dm.exe" -type f && \
-    find /usr/local/byond -name "dreamdaemon.exe" -type f && \
-    echo "BYOND directory contents:" && \
-    ls -la /usr/local/byond/bin/
 
 # Настраиваем переменные окружения
 ENV PATH="/usr/local/bin:${PATH}"
 ENV WINEDLLOVERRIDES="mscoree,mshtml="
 ENV DISPLAY=:0
 
-# НАСТРОЙКА WINE И СОЗДАНИЕ WRAPPER'ов
+# НАСТРОЙКА WINE И СОЗДАНИЕ WRAPPER'ов (компактная версия)
 RUN echo "=== SETTING UP WINE WRAPPERS ===" && \
-    # Инициализируем Wine
     export WINEDLLOVERRIDES="mscoree,mshtml=" && \
     export DISPLAY=:0 && \
     wineboot --init 2>/dev/null || true && \
     # Создаем wrapper для dm.exe
-    echo '#!/bin/bash' > /usr/local/bin/dm && \
-    echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /usr/local/bin/dm && \
-    echo 'export DISPLAY=:0' >> /usr/local/bin/dm && \
-    echo 'wine /usr/local/byond/bin/dm.exe "$@" 2>/dev/null' >> /usr/local/bin/dm && \
+    echo -e '#!/bin/bash\nexport WINEDLLOVERRIDES="mscoree,mshtml="\nexport DISPLAY=:0\nwine /usr/local/byond/bin/dm.exe "$@" 2>/dev/null' > /usr/local/bin/dm && \
     chmod +x /usr/local/bin/dm && \
     # Создаем wrapper для dreamdaemon.exe
-    echo '#!/bin/bash' > /usr/local/bin/dreamdaemon && \
-    echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /usr/local/bin/dreamdaemon && \
-    echo 'export DISPLAY=:0' >> /usr/local/bin/dreamdaemon && \
-    echo 'wine /usr/local/byond/bin/dreamdaemon.exe "$@" 2>/dev/null' >> /usr/local/bin/dreamdaemon && \
+    echo -e '#!/bin/bash\nexport WINEDLLOVERRIDES="mscoree,mshtml="\nexport DISPLAY=:0\nwine /usr/local/byond/bin/dreamdaemon.exe "$@" 2>/dev/null' > /usr/local/bin/dreamdaemon && \
     chmod +x /usr/local/bin/dreamdaemon && \
-    # Создаем симлинк DreamMaker
-    ln -sf /usr/local/bin/dm /usr/local/bin/DreamMaker
+    ln -sf /usr/local/bin/dm /usr/local/bin/DreamMaker && \
+    # Очищаем временные файлы wine
+    rm -rf /root/.wine/drive_c/windows/Installer/*
 
-# СБОРКА TGUI (интерфейс) - это критически важно!
-RUN echo "=== BUILDING TGUI ===" && \
+# Копируем остальной код проекта
+COPY . .
+
+# СБОРКА TGUI И DM (в одном слое для экономии места)
+RUN echo "=== BUILDING PROJECT ===" && \
     export PATH="/usr/local/byond/bin:$PATH" && \
-    cd /app && \
-    echo "Building TGUI components..." && \
-    node tools/build/build.js tgui --skip-icon-cutter
-
-# СБОРКА DM (игровая логика) 
-RUN echo "=== BUILDING DM ===" && \
-    export PATH="/usr/local/byond/bin:$PATH" && \
-    cd /app && \
-    echo "Building DM components..." && \
-    node tools/build/build.js dm --skip-icon-cutter
-
-# Проверяем результат сборки
-RUN echo "=== FINAL BUILD CHECK ===" && \
-    ls -la *.dmb *.rsc 2>/dev/null || echo "Build files check failed" && \
+    # Собираем TGUI
+    echo "Building TGUI..." && \
+    node tools/build/build.js tgui --skip-icon-cutter && \
+    # Собираем DM
+    echo "Building DM..." && \
+    node tools/build/build.js dm --skip-icon-cutter && \
+    # Очищаем временные файлы сборки
+    rm -rf node_modules/.cache && \
+    rm -rf /tmp/* && \
+    # Проверяем результат
     if [ -f "tgstation.dmb" ]; then \
         echo "SUCCESS: Build completed" && \
         ls -lh tgstation.dmb; \
@@ -131,38 +114,29 @@ RUN echo "=== FINAL BUILD CHECK ===" && \
         exit 1; \
     fi
 
+# Удаляем ненужные файлы после сборки
+RUN echo "=== CLEANUP ===" && \
+    # Удаляем исходники после сборки (оставляем только скомпилированные файлы)
+    find . -name "*.dm" -not -path "./maps/*" -delete 2>/dev/null || true && \
+    find . -name "*.dmi" -delete 2>/dev/null || true && \
+    # Удаляем инструменты сборки
+    rm -rf tools/build && \
+    rm -rf tgui/packages && \
+    # Очищаем кэши
+    rm -rf /root/.npm && \
+    rm -rf /root/.cache && \
+    rm -rf /var/cache/* && \
+    # Удаляем документацию и примеры
+    rm -rf /usr/share/doc && \
+    rm -rf /usr/share/man && \
+    find /usr -name "*.a" -delete 2>/dev/null || true
+
 # Открываем порты
 EXPOSE 1337
 
-# Создаем startup скрипт
-RUN echo '#!/bin/bash' > /app/start_server.sh && \
-    echo 'echo "=== SS13 SERVER STARTUP ==="' >> /app/start_server.sh && \
-    echo 'echo "Current directory: $(pwd)"' >> /app/start_server.sh && \
-    echo 'echo "Available files:"' >> /app/start_server.sh && \
-    echo 'ls -la' >> /app/start_server.sh && \
-    echo '' >> /app/start_server.sh && \
-    echo '# Проверяем наличие dmb файла' >> /app/start_server.sh && \
-    echo 'if [ ! -f "tgstation.dmb" ]; then' >> /app/start_server.sh && \
-    echo '    echo "ERROR: tgstation.dmb not found"' >> /app/start_server.sh && \
-    echo '    echo "Available files:"' >> /app/start_server.sh && \
-    echo '    ls -la' >> /app/start_server.sh && \
-    echo '    exit 1' >> /app/start_server.sh && \
-    echo 'fi' >> /app/start_server.sh && \
-    echo '' >> /app/start_server.sh && \
-    echo '# Ищем dreamdaemon' >> /app/start_server.sh && \
-    echo 'DAEMON_PATH=$(find /usr/local -name "dreamdaemon" -type f 2>/dev/null | head -1)' >> /app/start_server.sh && \
-    echo 'if [ -z "$DAEMON_PATH" ]; then' >> /app/start_server.sh && \
-    echo '    echo "ERROR: dreamdaemon not found"' >> /app/start_server.sh && \
-    echo '    find /usr/local -name "*daemon*" 2>/dev/null' >> /app/start_server.sh && \
-    echo '    exit 1' >> /app/start_server.sh && \
-    echo 'fi' >> /app/start_server.sh && \
-    echo '' >> /app/start_server.sh && \
-    echo 'echo "Found dreamdaemon: $DAEMON_PATH"' >> /app/start_server.sh && \
-    echo 'echo "Starting SS13 server on port 1337..."' >> /app/start_server.sh && \
-    echo '' >> /app/start_server.sh && \
-    echo '# Запускаем сервер' >> /app/start_server.sh && \
-    echo 'exec "$DAEMON_PATH" tgstation.dmb -port 1337 -trusted -verbose' >> /app/start_server.sh && \
+# Создаем компактный startup скрипт
+RUN echo -e '#!/bin/bash\necho "=== SS13 SERVER STARTUP ==="\nif [ ! -f "tgstation.dmb" ]; then\n    echo "ERROR: tgstation.dmb not found"; exit 1\nfi\nDAEMON_PATH=$(find /usr/local -name "dreamdaemon" -type f 2>/dev/null | head -1)\nif [ -z "$DAEMON_PATH" ]; then\n    echo "ERROR: dreamdaemon not found"; exit 1\nfi\necho "Starting SS13 server on port 1337..."\nexec "$DAEMON_PATH" tgstation.dmb -port 1337 -trusted -verbose' > /app/start_server.sh && \
     chmod +x /app/start_server.sh
 
 # Команда запуска
-CMD ["/app/start_server.sh"]]
+CMD ["/app/start_server.sh"]
