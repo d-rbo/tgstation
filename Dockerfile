@@ -30,7 +30,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
-
 # Копируем только необходимые файлы сначала
 COPY package*.json ./
 COPY tools/ ./tools/
