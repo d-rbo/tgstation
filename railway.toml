@@ -13,28 +13,3 @@ restartPolicyType = "always"
 [env]
 PORT = { default = "1337" }
 BYOND_STARTUP_TIMEOUT = { default = "120" }
-
----
-
-# .dockerignore - оптимизация сборки
-.git
-.gitignore
-README.md
-*.md
-.env*
-.DS_Store
-Thumbs.db
-
-# Исключаем ненужные файлы для сборки
-node_modules/.cache
-.npm
-.cache
-*.log
-*.tmp
-
-# Документация и примеры
-docs/
-examples/
-.github/
-
----
