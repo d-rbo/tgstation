@@ -41,14 +41,19 @@ RUN curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun && \
     rm -rf /root/.bun/install/cache
 
-# УСТАНОВКА WINE (только если абсолютно необходимо)
-RUN echo "=== INSTALLING WINE (minimal) ===" && \
+# УСТАНОВКА WINE и необходимых библиотек
+RUN echo "=== INSTALLING WINE and dependencies ===" && \
     dpkg --add-architecture i386 && \
     apt-get update && \
-    apt-get install -y --no-install-recommends wine wine32 xvfb && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean && \
-    rm -rf /usr/share/wine/mono /usr/share/wine/gecko
+    apt-get install -y --no-install-recommends \
+        wine \
+        wine32 \
+        xvfb \
+        winetricks \
+        cabextract \
+        wget \
+    && rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
 # Копируем BYOND только после установки wine
 COPY BYOND/ /usr/local/byond/
