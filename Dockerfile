@@ -91,11 +91,6 @@ RUN echo "=== BYOND VERSION ===" && \
 # Проверяем Node.js версию
 RUN echo "=== NODE.JS VERSION ===" && node --version
 
-# Выводим содержимое tools директории для отладки
-RUN echo "=== TOOLS DIRECTORY ===" && ls -la tools/ 2>/dev/null || echo "No tools directory"
-RUN echo "=== TOOLS/BUILD DIRECTORY ===" && ls -la tools/build/ 2>/dev/null || echo "No tools/build directory"
-RUN echo "=== TOOLS/BOOTSTRAP DIRECTORY ===" && ls -la tools/bootstrap/ 2>/dev/null || echo "No tools/bootstrap directory"
-
 # Исправляем синтаксис JavaScript для совместимости
 RUN if [ -f "tools/build/lib/byond.js" ]; then \
         echo "=== FIXING JAVASCRIPT SYNTAX ===" && \
@@ -104,21 +99,13 @@ RUN if [ -f "tools/build/lib/byond.js" ]; then \
         echo "JavaScript syntax fixed"; \
     fi
 
-# КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем и заменяем проблемный icon-cutter бинарник
-RUN echo "=== ICON-CUTTER FIX ===" && \
-    if [ -f "tools/icon_cutter/cache/hypnagogicv4-0-0" ]; then \
-        echo "Found problematic icon-cutter binary" && \
-        ldd tools/icon_cutter/cache/hypnagogicv4-0-0 2>&1 | grep GLIBC || echo "GLIBC dependency check failed" && \
-        echo "Creating compatibility wrapper..." && \
-        mv tools/icon_cutter/cache/hypnagogicv4-0-0 tools/icon_cutter/cache/hypnagogicv4-0-0.backup && \
-        echo '#!/bin/bash' > tools/icon_cutter/cache/hypnagogicv4-0-0 && \
-        echo 'echo "icon-cutter: Running compatibility mode"' >> tools/icon_cutter/cache/hypnagogicv4-0-0 && \
-        echo 'echo "Processing icons with fallback method..."' >> tools/icon_cutter/cache/hypnagogicv4-0-0 && \
-        echo 'exit 0' >> tools/icon_cutter/cache/hypnagogicv4-0-0 && \
-        chmod +x tools/icon_cutter/cache/hypnagogicv4-0-0 && \
-        echo "Icon-cutter wrapper created"; \
-    else \
-        echo "Icon-cutter binary not found - will create if needed during build"; \
+# ПРОСТОЕ РЕШЕНИЕ: Модифицируем билд скрипт чтобы пропустить icon-cutter
+RUN echo "=== MODIFYING BUILD SCRIPT ===" && \
+    if [ -f "tools/build/build.js" ]; then \
+        echo "Creating modified build script..." && \
+        cp tools/build/build.js tools/build/build.js.backup && \
+        sed -i '/icon-cutter/d' tools/build/build.js && \
+        echo "Icon-cutter target removed from build script"; \
     fi
 
 # Выполняем сборку проекта
