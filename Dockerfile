@@ -67,7 +67,22 @@ RUN echo "=== BYOND CHECK ===" && \
     find /usr/local/byond -name "dm" -type f && \
     find /usr/local/byond -name "dreamdaemon" -type f
 
+# Настраиваем переменные окружения
+ENV PATH="/usr/local/byond/bin:${PATH}"
 
+# ВАЖНО: Выполняем сборку проекта с пропуском icon-cutter
+RUN echo "=== BUILDING PROJECT WITH SKIP-ICON-CUTTER ===" && \
+    export PATH="/usr/local/byond/bin:$PATH" && \
+    if [ -f "tools/build/build.js" ]; then \
+        echo "Using build.js with skip-icon-cutter" && \
+        node tools/build/build.js build --skip-icon-cutter; \
+    elif [ -f "tools/bootstrap/javascript" ]; then \
+        echo "Using bootstrap build" && \
+        bash tools/bootstrap/javascript; \
+    else \
+        echo "Direct DM compilation fallback" && \
+        dm tgstation.dme; \
+    fi
 
 # Проверяем результат сборки
 RUN echo "=== FINAL BUILD CHECK ===" && \
@@ -79,9 +94,6 @@ RUN echo "=== FINAL BUILD CHECK ===" && \
         echo "ERROR: Build failed" && \
         exit 1; \
     fi
-
-# Настраиваем переменные окружения
-ENV PATH="/usr/local/byond/bin:${PATH}"
 
 # Открываем порты
 EXPOSE 1337
@@ -118,6 +130,9 @@ exec "$DAEMON_PATH" tgstation.dmb -port 1337 -trusted -verbose
 EOF
 
 RUN chmod +x /app/start_server.sh
+
+# Команда запуска
+CMD ["/app/start_server.sh"]
 
 # Команда запуска
 CMD ["/app/start_server.sh"]
