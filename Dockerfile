@@ -41,10 +41,17 @@ RUN curl -fsSL https://bun.sh/install | bash && \
 RUN echo "=== GLIBC VERSION CHECK ===" && \
     ldd --version
 
-# ПРАВИЛЬНАЯ УСТАНОВКА BYOND ДЛЯ LINUX
+# УСТАНОВКА WINE ДЛЯ ЗАПУСКА WINDOWS BYOND
+RUN echo "=== INSTALLING WINE FOR WINDOWS BYOND ===" && \
+    dpkg --add-architecture i386 && \
+    apt-get update && \
+    apt-get install -y wine32 wine64 winbind && \
+    rm -rf /var/lib/apt/lists/*
+
+# УСТАНОВКА BYOND ЧЕРЕЗ WINE
 RUN echo "=== INSTALLING BYOND ===" && \
-    if [ -d "BYOND" ] && [ -f "BYOND/bin/dm" ]; then \
-        echo "Found local Linux BYOND directory" && \
+    if [ -d "BYOND" ]; then \
+        echo "Found local BYOND directory" && \
         if [ -d "BYOND/byond" ]; then \
             cp -r BYOND/byond /usr/local/byond; \
         elif [ -d "BYOND/bin" ]; then \
@@ -53,38 +60,46 @@ RUN echo "=== INSTALLING BYOND ===" && \
         else \
             cp -r BYOND /usr/local/byond; \
         fi && \
-        find /usr/local/byond -type f -exec chmod +x {} \; && \
+        find /usr/local/byond -type f -name "*.exe" -exec chmod +x {} \; && \
         echo "BYOND installed from local directory"; \
     else \
-        echo "Downloading BYOND Linux version (local appears to be Windows)..." && \
-        wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" && \
-        unzip -q byond.zip && \
-        mv byond /usr/local/byond && \
-        find /usr/local/byond -type f -exec chmod +x {} \; && \
-        rm byond.zip && \
-        echo "BYOND downloaded and installed"; \
+        echo "ERROR: No local BYOND found and byond.com is down" && \
+        exit 1; \
     fi
 
-# Проверяем установку BYOND (Linux файлы БЕЗ .exe)
+# Проверяем установку BYOND (Windows версия через Wine)
 RUN echo "=== BYOND CHECK ===" && \
-    echo "Looking for Linux BYOND binaries:" && \
-    find /usr/local/byond -name "dm" -type f && \
-    find /usr/local/byond -name "dreamdaemon" -type f && \
+    echo "Looking for Windows BYOND binaries:" && \
+    find /usr/local/byond -name "dm.exe" -type f && \
+    find /usr/local/byond -name "dreamdaemon.exe" -type f && \
     echo "BYOND directory contents:" && \
     ls -la /usr/local/byond/bin/
 
 # Настраиваем переменные окружения
-ENV PATH="/usr/local/byond/bin:${PATH}"
+ENV PATH="/usr/local/bin:${PATH}"
+ENV WINEDLLOVERRIDES="mscoree,mshtml="
+ENV DISPLAY=:0
 
-# ИСПРАВЛЯЕМ BYOND для работы с TG build system (Linux версия)
-RUN echo "=== FIXING BYOND FOR TG BUILD SYSTEM ===" && \
-    # Создаем симлинк DreamMaker -> dm для совместимости (БЕЗ .exe!)
-    ln -sf /usr/local/byond/bin/dm /usr/local/byond/bin/DreamMaker && \
-    # Проверяем что все файлы на месте
-    echo "BYOND executables:" && \
-    ls -la /usr/local/byond/bin/ && \
-    echo "Testing DM compiler:" && \
-    /usr/local/byond/bin/dm --version 2>&1 || echo "DM version check completed"
+# НАСТРОЙКА WINE И СОЗДАНИЕ WRAPPER'ов
+RUN echo "=== SETTING UP WINE WRAPPERS ===" && \
+    # Инициализируем Wine
+    export WINEDLLOVERRIDES="mscoree,mshtml=" && \
+    export DISPLAY=:0 && \
+    wineboot --init 2>/dev/null || true && \
+    # Создаем wrapper для dm.exe
+    echo '#!/bin/bash' > /usr/local/bin/dm && \
+    echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /usr/local/bin/dm && \
+    echo 'export DISPLAY=:0' >> /usr/local/bin/dm && \
+    echo 'wine /usr/local/byond/bin/dm.exe "$@" 2>/dev/null' >> /usr/local/bin/dm && \
+    chmod +x /usr/local/bin/dm && \
+    # Создаем wrapper для dreamdaemon.exe
+    echo '#!/bin/bash' > /usr/local/bin/dreamdaemon && \
+    echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /usr/local/bin/dreamdaemon && \
+    echo 'export DISPLAY=:0' >> /usr/local/bin/dreamdaemon && \
+    echo 'wine /usr/local/byond/bin/dreamdaemon.exe "$@" 2>/dev/null' >> /usr/local/bin/dreamdaemon && \
+    chmod +x /usr/local/bin/dreamdaemon && \
+    # Создаем симлинк DreamMaker
+    ln -sf /usr/local/bin/dm /usr/local/bin/DreamMaker
 
 # СБОРКА TGUI (интерфейс) - это критически важно!
 RUN echo "=== BUILDING TGUI ===" && \
@@ -145,4 +160,4 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     chmod +x /app/start_server.sh
 
 # Команда запуска
-CMD ["/app/start_server.sh"]
+CMD ["/app/start_server.sh"]]
