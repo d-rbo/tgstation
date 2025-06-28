@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Устанавливаем только необходимые системные зависимости в одном слое
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
+    unzip \
     curl \
     gcc \
     g++ \
@@ -17,10 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     make \
     pkg-config \
-    # Убираем лишние 32-битные библиотеки если они не критичны
-    # lib32z1 \
-    # lib32ncurses6 \
-    # lib32stdc++6 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/*
