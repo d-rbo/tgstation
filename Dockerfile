@@ -58,44 +58,42 @@ COPY --from=builder /app/tgui/public/ ./tgui/public/
 RUN mkdir -p /app/data/logs /app/data/player_saves
 
 # Создаем оптимизированный startup script
-RUN cat > /app/start_server.sh << 'EOF'
-#!/bin/bash
-set -e
-
-echo "🚀 Starting SS13 TGStation Server"
-echo "=================================="
-
-# Проверяем наличие .dmb файла
-if [ ! -f "tgstation.dmb" ]; then
-    echo "❌ ERROR: tgstation.dmb not found"
-    ls -la
-    exit 1
-fi
-
-# Проверяем размер файла
-DMB_SIZE=$(stat -f%z tgstation.dmb 2>/dev/null || stat -c%s tgstation.dmb 2>/dev/null || echo "0")
-if [ "$DMB_SIZE" -lt 1000000 ]; then
-    echo "❌ ERROR: tgstation.dmb seems too small ($DMB_SIZE bytes)"
-    exit 1
-fi
-
-echo "✅ Found tgstation.dmb (${DMB_SIZE} bytes)"
-
-# Настройки для Railway
-export PORT=${PORT:-1337}
-export BYOND_WORLD_LOG="/app/data/logs/world.log"
-
-# Создаем директорию для логов
-mkdir -p /app/data/logs
-
-echo "🌐 Starting server on port $PORT"
-echo "📁 Working directory: $(pwd)"
-echo "🗂️  Files in directory:"
-ls -la
-
-# Запускаем DreamDaemon
-exec DreamDaemon tgstation.dmb -port $PORT -trusted -verbose -log /app/data/logs/server.log
-EOF
+RUN echo '#!/bin/bash' > /app/start_server.sh && \
+    echo 'set -e' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo 'echo "🚀 Starting SS13 TGStation Server"' >> /app/start_server.sh && \
+    echo 'echo "=================================="' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Проверяем наличие .dmb файла' >> /app/start_server.sh && \
+    echo 'if [ ! -f "tgstation.dmb" ]; then' >> /app/start_server.sh && \
+    echo '    echo "❌ ERROR: tgstation.dmb not found"' >> /app/start_server.sh && \
+    echo '    ls -la' >> /app/start_server.sh && \
+    echo '    exit 1' >> /app/start_server.sh && \
+    echo 'fi' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Проверяем размер файла' >> /app/start_server.sh && \
+    echo 'DMB_SIZE=$(stat -c%s tgstation.dmb 2>/dev/null || echo "0")' >> /app/start_server.sh && \
+    echo 'if [ "$DMB_SIZE" -lt 1000000 ]; then' >> /app/start_server.sh && \
+    echo '    echo "❌ ERROR: tgstation.dmb seems too small ($DMB_SIZE bytes)"' >> /app/start_server.sh && \
+    echo '    exit 1' >> /app/start_server.sh && \
+    echo 'fi' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo 'echo "✅ Found tgstation.dmb (${DMB_SIZE} bytes)"' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Настройки для Railway' >> /app/start_server.sh && \
+    echo 'export PORT=${PORT:-1337}' >> /app/start_server.sh && \
+    echo 'export BYOND_WORLD_LOG="/app/data/logs/world.log"' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Создаем директорию для логов' >> /app/start_server.sh && \
+    echo 'mkdir -p /app/data/logs' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo 'echo "🌐 Starting server on port $PORT"' >> /app/start_server.sh && \
+    echo 'echo "📁 Working directory: $(pwd)"' >> /app/start_server.sh && \
+    echo 'echo "🗂️  Files in directory:"' >> /app/start_server.sh && \
+    echo 'ls -la' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Запускаем DreamDaemon' >> /app/start_server.sh && \
+    echo 'exec DreamDaemon tgstation.dmb -port $PORT -trusted -verbose -log /app/data/logs/server.log' >> /app/start_server.sh
 
 # Делаем скрипт исполняемым
 RUN chmod +x /app/start_server.sh
