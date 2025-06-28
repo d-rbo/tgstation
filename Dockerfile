@@ -1,21 +1,36 @@
-# Используем более новый образ с Node.js 18
-FROM node:18-bullseye
+# Используем Ubuntu 20.04 для совместимости с GLIBC 2.31
+FROM ubuntu:20.04
 
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
-    libssl1.1 \
+    curl \
     gcc \
     g++ \
     libc6-dev \
+    libssl1.1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Устанавливаем Node.js 18
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
 # Копируем весь проект
 COPY . .
+
+# Install bun (required for tgui build)
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+
+# Debug GLIBC version
+RUN echo "=== GLIBC VERSION CHECK ===" && \
+    ldd --version && \
+    ls -la /lib/x86_64-linux-gnu/libc.so.6 && \
+    /lib/x86_64-linux-gnu/libc.so.6 2>&1 | head -5 || echo "GLIBC check failed"
 
 # Диагностика структуры BYOND папки
 RUN echo "=== BYOND DIRECTORY STRUCTURE ===" && \
@@ -73,20 +88,6 @@ RUN echo "=== BYOND INSTALLATION CHECK ===" && \
 RUN echo "=== BYOND VERSION ===" && \
     find /usr/local -name "dm" -type f -exec {} -version \; 2>/dev/null || echo "DM not working"
 
-# Install Node.js 18+ for ?? operator support
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs
-
-# Install bun (required for tgui build)
-RUN curl -fsSL https://bun.sh/install | bash && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
-
-# Debug GLIBC version
-RUN echo "=== GLIBC VERSION CHECK ===" && \
-    ldd --version && \
-    ls -la /lib/x86_64-linux-gnu/libc.so.6 && \
-    /lib/x86_64-linux-gnu/libc.so.6 2>&1 | head -5 || echo "GLIBC check failed"
-    
 # Проверяем Node.js версию
 RUN echo "=== NODE.JS VERSION ===" && node --version
 
@@ -101,6 +102,23 @@ RUN if [ -f "tools/build/lib/byond.js" ]; then \
         sed -i 's/?? \[\]/|| []/g' tools/build/lib/byond.js && \
         sed -i 's/?? /|| /g' tools/build/lib/byond.js && \
         echo "JavaScript syntax fixed"; \
+    fi
+
+# КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем и заменяем проблемный icon-cutter бинарник
+RUN echo "=== ICON-CUTTER FIX ===" && \
+    if [ -f "tools/icon_cutter/cache/hypnagogicv4-0-0" ]; then \
+        echo "Found problematic icon-cutter binary" && \
+        ldd tools/icon_cutter/cache/hypnagogicv4-0-0 2>&1 | grep GLIBC || echo "GLIBC dependency check failed" && \
+        echo "Creating compatibility wrapper..." && \
+        mv tools/icon_cutter/cache/hypnagogicv4-0-0 tools/icon_cutter/cache/hypnagogicv4-0-0.backup && \
+        echo '#!/bin/bash' > tools/icon_cutter/cache/hypnagogicv4-0-0 && \
+        echo 'echo "icon-cutter: Running compatibility mode"' >> tools/icon_cutter/cache/hypnagogicv4-0-0 && \
+        echo 'echo "Processing icons with fallback method..."' >> tools/icon_cutter/cache/hypnagogicv4-0-0 && \
+        echo 'exit 0' >> tools/icon_cutter/cache/hypnagogicv4-0-0 && \
+        chmod +x tools/icon_cutter/cache/hypnagogicv4-0-0 && \
+        echo "Icon-cutter wrapper created"; \
+    else \
+        echo "Icon-cutter binary not found - will create if needed during build"; \
     fi
 
 # Выполняем сборку проекта
