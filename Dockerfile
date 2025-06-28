@@ -48,12 +48,10 @@ RUN echo "=== INSTALLING WINE and dependencies ===" && \
     apt-get install -y --no-install-recommends \
         wine \
         wine32 \
-        wine64 \
         xvfb \
         winetricks \
         cabextract \
         wget \
-        zenity \
     && rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -77,13 +75,21 @@ ENV DISPLAY=:99
 ENV PORT=1337
 ENV WINEPREFIX=/root/.wine
     
-# НАСТРОЙКА WINE И УСТАНОВКА VCREDIST
-RUN echo "=== SETTING UP WINE AND INSTALLING VCREDIST ===" && \
+# НАСТРОЙКА WINE И СОЗДАНИЕ WRAPPER'ов
+RUN echo "=== SETTING UP WINE WRAPPERS ===" && \
     export WINEDLLOVERRIDES="mscoree,mshtml=" && \
     export DISPLAY=:99 && \
-    export WINEPREFIX=/root/.wine && \
-    # Запускаем Xvfb для инициализации wine
-    Xvfb :99 -screen 0 1024x768x16 -ac & \
+    # Инициализируем wine в фоновом режиме
+    Xvfb :99 -screen 0 1024x768x16 & \
+    sleep 2 && \
+    wineboot --init 2>/dev/null || true && \
+    sleep 3 && \
+    # Скачиваем и устанавливаем только mfc140u.dll напрямую
+    wget -q -O /tmp/mfc140u.dll "https://github.com/nalexandru/api-ms-win-core-path-HACK/raw/master/dll/mfc140u.dll" && \
+    cp /tmp/mfc140u.dll /root/.wine/drive_c/windows/system32/ && \
+    cp /tmp/mfc140u.dll /root/.wine/drive_c/windows/syswow64/ && \
+    rm /tmp/mfc140u.dll && \
+    pkill Xvfb || truevfb :99 -screen 0 1024x768x16 -ac & \
     sleep 3 && \
     # Инициализируем wine
     echo "Initializing wine..." && \
@@ -128,7 +134,7 @@ RUN echo "=== CREATING WRAPPERS ===" && \
     echo 'echo "DreamDaemon wrapper called with: $*"' >> /usr/local/bin/dreamdaemon && \
     echo '# Проверяем наличие необходимых DLL перед запуском' >> /usr/local/bin/dreamdaemon && \
     echo 'echo "Checking required DLLs..."' >> /usr/local/bin/dreamdaemon && \
-    echo 'find /root/.wine -name "mfc140*.dll" | head -3' >> /usr/local/bin/dreamdaemon && \
+    echo 'ls -la /root/.wine/drive_c/windows/system32/mfc140u.dll 2>/dev/null || echo "mfc140u.dll not found"' >> /usr/local/bin/dreamdaemon && \
     echo 'wine /usr/local/byond/bin/dreamdaemon.exe "$@"' >> /usr/local/bin/dreamdaemon && \
     chmod +x /usr/local/bin/dreamdaemon && \
     ln -sf /usr/local/bin/dm /usr/local/bin/DreamMaker && \
