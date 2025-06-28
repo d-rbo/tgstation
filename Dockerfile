@@ -1,4 +1,5 @@
 # Используем Ubuntu 22.04 для поддержки GLIBC 2.35
+# Используем Ubuntu 22.04 для поддержки GLIBC 2.35
 FROM ubuntu:22.04
 
 # Предотвращаем интерактивные запросы
@@ -99,37 +100,34 @@ RUN echo "=== FINAL BUILD CHECK ===" && \
 EXPOSE 1337
 
 # Создаем startup скрипт
-RUN cat > /app/start_server.sh << 'EOF'
-#!/bin/bash
-echo "=== SS13 SERVER STARTUP ==="
-echo "Current directory: $(pwd)"
-echo "Available files:"
-ls -la
-
-# Проверяем наличие dmb файла
-if [ ! -f "tgstation.dmb" ]; then
-    echo "ERROR: tgstation.dmb not found"
-    echo "Available files:"
-    ls -la
-    exit 1
-fi
-
-# Ищем dreamdaemon
-DAEMON_PATH=$(find /usr/local -name "dreamdaemon" -type f 2>/dev/null | head -1)
-if [ -z "$DAEMON_PATH" ]; then
-    echo "ERROR: dreamdaemon not found"
-    find /usr/local -name "*daemon*" 2>/dev/null
-    exit 1
-fi
-
-echo "Found dreamdaemon: $DAEMON_PATH"
-echo "Starting SS13 server on port 1337..."
-
-# Запускаем сервер
-exec "$DAEMON_PATH" tgstation.dmb -port 1337 -trusted -verbose
-EOF
-
-RUN chmod +x /app/start_server.sh
+RUN echo '#!/bin/bash' > /app/start_server.sh && \
+    echo 'echo "=== SS13 SERVER STARTUP ==="' >> /app/start_server.sh && \
+    echo 'echo "Current directory: $(pwd)"' >> /app/start_server.sh && \
+    echo 'echo "Available files:"' >> /app/start_server.sh && \
+    echo 'ls -la' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Проверяем наличие dmb файла' >> /app/start_server.sh && \
+    echo 'if [ ! -f "tgstation.dmb" ]; then' >> /app/start_server.sh && \
+    echo '    echo "ERROR: tgstation.dmb not found"' >> /app/start_server.sh && \
+    echo '    echo "Available files:"' >> /app/start_server.sh && \
+    echo '    ls -la' >> /app/start_server.sh && \
+    echo '    exit 1' >> /app/start_server.sh && \
+    echo 'fi' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Ищем dreamdaemon' >> /app/start_server.sh && \
+    echo 'DAEMON_PATH=$(find /usr/local -name "dreamdaemon" -type f 2>/dev/null | head -1)' >> /app/start_server.sh && \
+    echo 'if [ -z "$DAEMON_PATH" ]; then' >> /app/start_server.sh && \
+    echo '    echo "ERROR: dreamdaemon not found"' >> /app/start_server.sh && \
+    echo '    find /usr/local -name "*daemon*" 2>/dev/null' >> /app/start_server.sh && \
+    echo '    exit 1' >> /app/start_server.sh && \
+    echo 'fi' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo 'echo "Found dreamdaemon: $DAEMON_PATH"' >> /app/start_server.sh && \
+    echo 'echo "Starting SS13 server on port 1337..."' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Запускаем сервер' >> /app/start_server.sh && \
+    echo 'exec "$DAEMON_PATH" tgstation.dmb -port 1337 -trusted -verbose' >> /app/start_server.sh && \
+    chmod +x /app/start_server.sh
 
 # Команда запуска
 CMD ["/app/start_server.sh"]
