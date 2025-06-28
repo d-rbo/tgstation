@@ -133,6 +133,3 @@ RUN chmod +x /app/start_server.sh
 
 # Команда запуска
 CMD ["/app/start_server.sh"]
-
-# Команда запуска
-CMD ["/app/start_server.sh"]
