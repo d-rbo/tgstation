@@ -1,4 +1,4 @@
-# Исправленная версия Dockerfile для Railway
+# Исправленная версия Dockerfile для Railway с установкой Visual C++ Redistributable
 FROM ubuntu:22.04
 
 # Предотвращаем интерактивные запросы
@@ -48,10 +48,12 @@ RUN echo "=== INSTALLING WINE and dependencies ===" && \
     apt-get install -y --no-install-recommends \
         wine \
         wine32 \
+        wine64 \
         xvfb \
         winetricks \
         cabextract \
         wget \
+        zenity \
     && rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -73,40 +75,64 @@ ENV PATH="/usr/local/bin:${PATH}"
 ENV WINEDLLOVERRIDES="mscoree,mshtml="
 ENV DISPLAY=:99
 ENV PORT=1337
+ENV WINEPREFIX=/root/.wine
     
-# НАСТРОЙКА WINE И СОЗДАНИЕ WRAPPER'ов
-RUN echo "=== SETTING UP WINE WRAPPERS ===" && \
+# НАСТРОЙКА WINE И УСТАНОВКА VCREDIST
+RUN echo "=== SETTING UP WINE AND INSTALLING VCREDIST ===" && \
     export WINEDLLOVERRIDES="mscoree,mshtml=" && \
     export DISPLAY=:99 && \
-    # Инициализируем wine в фоновом режиме
-    Xvfb :99 -screen 0 1024x768x16 & \
-    sleep 2 && \
-    wineboot --init 2>/dev/null || true && \
+    export WINEPREFIX=/root/.wine && \
+    # Запускаем Xvfb для инициализации wine
+    Xvfb :99 -screen 0 1024x768x16 -ac & \
     sleep 3 && \
+    # Инициализируем wine
+    echo "Initializing wine..." && \
+    wineboot --init && \
+    sleep 5 && \
+    # Устанавливаем необходимые компоненты через winetricks
+    echo "Installing Visual C++ Redistributables..." && \
+    winetricks --unattended vcrun2019 && \
+    sleep 2 && \
+    # Дополнительно устанавливаем mfc140
+    winetricks --unattended mfc140 && \
+    sleep 2 && \
+    # Проверяем что библиотеки установились
+    echo "Checking installed DLLs..." && \
+    ls -la /root/.wine/drive_c/windows/system32/ | grep -E "(mfc140|vcruntime)" || echo "DLLs not found in system32" && \
+    ls -la /root/.wine/drive_c/windows/syswow64/ | grep -E "(mfc140|vcruntime)" || echo "DLLs not found in syswow64" && \
+    # Останавливаем Xvfb
     pkill Xvfb || true && \
+    sleep 1
+
+# СОЗДАНИЕ WRAPPER'ов
+RUN echo "=== CREATING WRAPPERS ===" && \
     # Создаем wrapper для dm.exe
     echo '#!/bin/bash' > /usr/local/bin/dm && \
     echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /usr/local/bin/dm && \
     echo 'export DISPLAY=:99' >> /usr/local/bin/dm && \
+    echo 'export WINEPREFIX=/root/.wine' >> /usr/local/bin/dm && \
     echo 'if ! pgrep Xvfb > /dev/null; then' >> /usr/local/bin/dm && \
-    echo '    Xvfb :99 -screen 0 1024x768x16 & sleep 2' >> /usr/local/bin/dm && \
+    echo '    Xvfb :99 -screen 0 1024x768x16 -ac & sleep 2' >> /usr/local/bin/dm && \
     echo 'fi' >> /usr/local/bin/dm && \
     echo 'wine /usr/local/byond/bin/dm.exe "$@" 2>/dev/null' >> /usr/local/bin/dm && \
     chmod +x /usr/local/bin/dm && \
-    # Создаем wrapper для dreamdaemon.exe (ИСПРАВЛЕННЫЙ)
+    # Создаем wrapper для dreamdaemon.exe (ИСПРАВЛЕННЫЙ с WINEPREFIX)
     echo '#!/bin/bash' > /usr/local/bin/dreamdaemon && \
     echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /usr/local/bin/dreamdaemon && \
     echo 'export DISPLAY=:99' >> /usr/local/bin/dreamdaemon && \
+    echo 'export WINEPREFIX=/root/.wine' >> /usr/local/bin/dreamdaemon && \
     echo 'if ! pgrep Xvfb > /dev/null; then' >> /usr/local/bin/dreamdaemon && \
-    echo '    Xvfb :99 -screen 0 1024x768x16 & sleep 2' >> /usr/local/bin/dreamdaemon && \
+    echo '    Xvfb :99 -screen 0 1024x768x16 -ac & sleep 3' >> /usr/local/bin/dreamdaemon && \
     echo 'fi' >> /usr/local/bin/dreamdaemon && \
     echo '# Логируем все выходы для отладки' >> /usr/local/bin/dreamdaemon && \
     echo 'echo "DreamDaemon wrapper called with: $*"' >> /usr/local/bin/dreamdaemon && \
+    echo '# Проверяем наличие необходимых DLL перед запуском' >> /usr/local/bin/dreamdaemon && \
+    echo 'echo "Checking required DLLs..."' >> /usr/local/bin/dreamdaemon && \
+    echo 'find /root/.wine -name "mfc140*.dll" | head -3' >> /usr/local/bin/dreamdaemon && \
     echo 'wine /usr/local/byond/bin/dreamdaemon.exe "$@"' >> /usr/local/bin/dreamdaemon && \
     chmod +x /usr/local/bin/dreamdaemon && \
     ln -sf /usr/local/bin/dm /usr/local/bin/DreamMaker && \
-    ln -sf /usr/local/bin/dreamdaemon /usr/local/bin/DreamDaemon && \
-    rm -rf /root/.wine/drive_c/windows/Installer/* || true
+    ln -sf /usr/local/bin/dreamdaemon /usr/local/bin/DreamDaemon
 
 # Копируем остальной код проекта
 COPY . .
@@ -114,8 +140,9 @@ COPY . .
 # СБОРКА TGUI И DM
 RUN echo "=== BUILDING PROJECT ===" && \
     export PATH="/usr/local/byond/bin:$PATH" && \
-    Xvfb :99 -screen 0 1024x768x16 & \
-    sleep 2 && \
+    export WINEPREFIX=/root/.wine && \
+    Xvfb :99 -screen 0 1024x768x16 -ac & \
+    sleep 3 && \
     echo "Building TGUI..." && \
     node tools/build/build.js tgui --skip-icon-cutter && \
     echo "Building DM..." && \
@@ -151,13 +178,14 @@ EXPOSE $PORT
 RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo 'set -e' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
-    echo 'echo "🚀 Starting SS13 TGStation Server (FIXED VERSION)"' >> /app/start_server.sh && \
+    echo 'echo "🚀 Starting SS13 TGStation Server (VCREDIST FIXED VERSION)"' >> /app/start_server.sh && \
     echo 'echo "======================================================="' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Railway переменные' >> /app/start_server.sh && \
     echo 'export PORT=${PORT:-1337}' >> /app/start_server.sh && \
     echo 'export DISPLAY=:99' >> /app/start_server.sh && \
     echo 'export WINEDLLOVERRIDES="mscoree,mshtml="' >> /app/start_server.sh && \
+    echo 'export WINEPREFIX=/root/.wine' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Проверяем файлы' >> /app/start_server.sh && \
     echo 'if [ ! -f "tgstation.dmb" ]; then' >> /app/start_server.sh && \
@@ -169,6 +197,11 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo 'echo "✅ Found tgstation.dmb"' >> /app/start_server.sh && \
     echo 'ls -lh tgstation.dmb' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
+    echo '# Проверяем наличие установленных DLL' >> /app/start_server.sh && \
+    echo 'echo "🔍 Checking installed Visual C++ libraries..."' >> /app/start_server.sh && \
+    echo 'find /root/.wine -name "mfc140*.dll" -exec ls -la {} \; || echo "No mfc140 DLLs found"' >> /app/start_server.sh && \
+    echo 'find /root/.wine -name "vcruntime*.dll" -exec ls -la {} \; || echo "No vcruntime DLLs found"' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
     echo '# Очищаем старые X-серверы' >> /app/start_server.sh && \
     echo 'echo "🧹 Cleaning up old X servers..."' >> /app/start_server.sh && \
     echo 'pkill Xvfb || true' >> /app/start_server.sh && \
@@ -179,7 +212,7 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo 'echo "🖥️  Starting virtual display..."' >> /app/start_server.sh && \
     echo 'Xvfb :99 -screen 0 1024x768x16 -ac &' >> /app/start_server.sh && \
     echo 'XVFB_PID=$!' >> /app/start_server.sh && \
-    echo 'sleep 3' >> /app/start_server.sh && \
+    echo 'sleep 5' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Проверяем что X-сервер запустился' >> /app/start_server.sh && \
     echo 'if ! pgrep Xvfb > /dev/null; then' >> /app/start_server.sh && \
@@ -205,7 +238,7 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Тестируем DreamDaemon с версией' >> /app/start_server.sh && \
     echo 'echo "🧪 Testing DreamDaemon..."' >> /app/start_server.sh && \
-    echo 'timeout 10s /usr/local/bin/dreamdaemon -version || echo "Version check failed/timed out"' >> /app/start_server.sh && \
+    echo 'timeout 15s /usr/local/bin/dreamdaemon -version || echo "Version check failed/timed out (this might be normal)"' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Функция очистки при завершении' >> /app/start_server.sh && \
     echo 'cleanup() {' >> /app/start_server.sh && \
@@ -222,6 +255,7 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo 'echo "🔧 DMB file: $(pwd)/tgstation.dmb"' >> /app/start_server.sh && \
     echo 'echo "🔧 DreamDaemon wrapper: /usr/local/bin/dreamdaemon"' >> /app/start_server.sh && \
     echo 'echo "🔧 DreamDaemon exe: /usr/local/byond/bin/dreamdaemon.exe"' >> /app/start_server.sh && \
+    echo 'echo "🔧 Wine prefix: $WINEPREFIX"' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Запускаем с максимальными логами и без exec (чтобы поймать ошибки)' >> /app/start_server.sh && \
     echo 'echo "🚀 Launching DreamDaemon with full logging..."' >> /app/start_server.sh && \
@@ -233,10 +267,11 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo 'echo "🎯 DreamDaemon started with PID: $DAEMON_PID"' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Ждем и проверяем статус' >> /app/start_server.sh && \
-    echo 'sleep 10' >> /app/start_server.sh && \
+    echo 'sleep 15' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo 'if kill -0 $DAEMON_PID 2>/dev/null; then' >> /app/start_server.sh && \
-    echo '    echo "✅ DreamDaemon is running! Waiting indefinitely..."' >> /app/start_server.sh && \
+    echo '    echo "✅ DreamDaemon is running! Server should be accessible on port $PORT"' >> /app/start_server.sh && \
+    echo '    echo "🎮 Connect to your Railway domain on port $PORT to play!"' >> /app/start_server.sh && \
     echo '    wait $DAEMON_PID' >> /app/start_server.sh && \
     echo 'else' >> /app/start_server.sh && \
     echo '    echo "❌ DreamDaemon crashed or exited early!"' >> /app/start_server.sh && \
