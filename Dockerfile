@@ -111,31 +111,6 @@ RUN echo "=== SETTING UP WINE WRAPPERS ===" && \
 # Копируем остальной код проекта
 COPY . .
 
-
-# Альтернативный способ установки vcredist (добавьте после установки wine)
-RUN echo "=== MANUAL VCREDIST INSTALLATION ===" && \
-    export WINEDLLOVERRIDES="mscoree,mshtml=" && \
-    export DISPLAY=:99 && \
-    # Запускаем X-сервер
-    Xvfb :99 -screen 0 1024x768x16 & \
-    sleep 2 && \
-    wineboot --init 2>/dev/null || true && \
-    sleep 3 && \
-    # Скачиваем и устанавливаем vcredist вручную
-    cd /tmp && \
-    wget -q https://aka.ms/vs/17/release/vc_redist.x86.exe -O vcredist_x86.exe && \
-    wget -q https://aka.ms/vs/17/release/vc_redist.x64.exe -O vcredist_x64.exe && \
-    # Устанавливаем x86 версию (тихая установка)
-    wine vcredist_x86.exe /quiet /norestart || echo "x86 vcredist failed" && \
-    sleep 5 && \
-    # Устанавливаем x64 версию
-    wine vcredist_x64.exe /quiet /norestart || echo "x64 vcredist failed" && \
-    sleep 5 && \
-    # Очищаем
-    rm -f vcredist_*.exe && \
-    pkill Xvfb || true && \
-    # Проверяем что библиотеки установились
-    find /root/.wine -name "*mfc140*" -type f || echo "mfc140 not found after
 # СБОРКА TGUI И DM
 RUN echo "=== BUILDING PROJECT ===" && \
     export PATH="/usr/local/byond/bin:$PATH" && \
