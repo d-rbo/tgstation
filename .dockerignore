@@ -15,6 +15,13 @@ README.md
 cfg
 data
 SQL
+.git
+.gitignore
+README.md
+*.md
+.env*
+.DS_Store
+Thumbs.db
 node_modules
 tgstation.dmb
 tgstation.int
@@ -24,3 +31,14 @@ tgstation.dyn.rsc
 *.dll
 Dockerfile
 tools/bootstrap/.cache
+# Исключаем ненужные файлы для сборки
+node_modules/.cache
+.npm
+.cache
+*.log
+*.tmp
+
+# Документация и примеры
+docs/
+examples/
+.github/
