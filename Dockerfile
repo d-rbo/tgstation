@@ -1,5 +1,4 @@
 # Используем Ubuntu 22.04 для поддержки GLIBC 2.35
-# Используем Ubuntu 22.04 для поддержки GLIBC 2.35
 FROM ubuntu:22.04
 
 # Предотвращаем интерактивные запросы
@@ -71,19 +70,29 @@ RUN echo "=== BYOND CHECK ===" && \
 # Настраиваем переменные окружения
 ENV PATH="/usr/local/byond/bin:${PATH}"
 
-# ВАЖНО: Выполняем сборку проекта с пропуском icon-cutter
-RUN echo "=== BUILDING PROJECT WITH SKIP-ICON-CUTTER ===" && \
+# ИСПРАВЛЯЕМ BYOND для работы с TG build system
+RUN echo "=== FIXING BYOND FOR TG BUILD SYSTEM ===" && \
+    # Создаем симлинк DreamMaker -> dm.exe для совместимости
+    ln -sf /usr/local/byond/bin/dm.exe /usr/local/byond/bin/DreamMaker && \
+    # Проверяем что все файлы на месте
+    echo "BYOND executables:" && \
+    ls -la /usr/local/byond/bin/ && \
+    echo "Testing DM compiler:" && \
+    /usr/local/byond/bin/dm.exe -version
+
+# СБОРКА TGUI (интерфейс) - это критически важно!
+RUN echo "=== BUILDING TGUI ===" && \
     export PATH="/usr/local/byond/bin:$PATH" && \
-    if [ -f "tools/build/build.js" ]; then \
-        echo "Using build.js with skip-icon-cutter" && \
-        node tools/build/build.js build --skip-icon-cutter; \
-    elif [ -f "tools/bootstrap/javascript" ]; then \
-        echo "Using bootstrap build" && \
-        bash tools/bootstrap/javascript; \
-    else \
-        echo "Direct DM compilation fallback" && \
-        dm tgstation.dme; \
-    fi
+    cd /app && \
+    echo "Building TGUI components..." && \
+    node tools/build/build.js tgui --skip-icon-cutter
+
+# СБОРКА DM (игровая логика) 
+RUN echo "=== BUILDING DM ===" && \
+    export PATH="/usr/local/byond/bin:$PATH" && \
+    cd /app && \
+    echo "Building DM components..." && \
+    node tools/build/build.js dm --skip-icon-cutter
 
 # Проверяем результат сборки
 RUN echo "=== FINAL BUILD CHECK ===" && \
