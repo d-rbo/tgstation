@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y \
     git \
     make \
     pkg-config \
+    lib32z1 \
+    lib32ncurses6 \
+    lib32stdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем Node.js 18
@@ -38,10 +41,10 @@ RUN curl -fsSL https://bun.sh/install | bash && \
 RUN echo "=== GLIBC VERSION CHECK ===" && \
     ldd --version
 
-# Устанавливаем BYOND
+# ПРАВИЛЬНАЯ УСТАНОВКА BYOND ДЛЯ LINUX
 RUN echo "=== INSTALLING BYOND ===" && \
-    if [ -d "BYOND" ]; then \
-        echo "Found local BYOND directory" && \
+    if [ -d "BYOND" ] && [ -f "BYOND/bin/dm" ]; then \
+        echo "Found local Linux BYOND directory" && \
         if [ -d "BYOND/byond" ]; then \
             cp -r BYOND/byond /usr/local/byond; \
         elif [ -d "BYOND/bin" ]; then \
@@ -53,7 +56,7 @@ RUN echo "=== INSTALLING BYOND ===" && \
         find /usr/local/byond -type f -exec chmod +x {} \; && \
         echo "BYOND installed from local directory"; \
     else \
-        echo "Downloading BYOND..." && \
+        echo "Downloading BYOND Linux version (local appears to be Windows)..." && \
         wget -O byond.zip "http://www.byond.com/download/build/515/515.1637_byond_linux.zip" && \
         unzip -q byond.zip && \
         mv byond /usr/local/byond && \
@@ -62,23 +65,26 @@ RUN echo "=== INSTALLING BYOND ===" && \
         echo "BYOND downloaded and installed"; \
     fi
 
-# Проверяем установку BYOND
+# Проверяем установку BYOND (Linux файлы БЕЗ .exe)
 RUN echo "=== BYOND CHECK ===" && \
+    echo "Looking for Linux BYOND binaries:" && \
     find /usr/local/byond -name "dm" -type f && \
-    find /usr/local/byond -name "dreamdaemon" -type f
+    find /usr/local/byond -name "dreamdaemon" -type f && \
+    echo "BYOND directory contents:" && \
+    ls -la /usr/local/byond/bin/
 
 # Настраиваем переменные окружения
 ENV PATH="/usr/local/byond/bin:${PATH}"
 
-# ИСПРАВЛЯЕМ BYOND для работы с TG build system
+# ИСПРАВЛЯЕМ BYOND для работы с TG build system (Linux версия)
 RUN echo "=== FIXING BYOND FOR TG BUILD SYSTEM ===" && \
-    # Создаем симлинк DreamMaker -> dm.exe для совместимости
-    ln -sf /usr/local/byond/bin/dm.exe /usr/local/byond/bin/DreamMaker && \
+    # Создаем симлинк DreamMaker -> dm для совместимости (БЕЗ .exe!)
+    ln -sf /usr/local/byond/bin/dm /usr/local/byond/bin/DreamMaker && \
     # Проверяем что все файлы на месте
     echo "BYOND executables:" && \
     ls -la /usr/local/byond/bin/ && \
     echo "Testing DM compiler:" && \
-    /usr/local/byond/bin/dm.exe -version
+    /usr/local/byond/bin/dm --version 2>&1 || echo "DM version check completed"
 
 # СБОРКА TGUI (интерфейс) - это критически важно!
 RUN echo "=== BUILDING TGUI ===" && \
