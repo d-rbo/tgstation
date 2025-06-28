@@ -55,19 +55,19 @@ RUN curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun && \
     rm -rf /root/.bun/install/cache
 
-# УСТАНОВКА WINE и необходимых библиотек (оптимизированная)
+# УСТАНОВКА WINE и необходимых библиотек (упрощенная версия)
 RUN echo "=== INSTALLING WINE and dependencies ===" && \
     dpkg --add-architecture i386 && \
-    wget -nc https://dl.winehq.org/wine-builds/winehq.key && \
-    apt-key add winehq.key && \
-    echo "deb https://dl.winehq.org/wine-builds/debian/ bullseye main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        winehq-stable \
+        wine \
+        wine32 \
+        wine64 \
         xvfb \
         winetricks \
         cabextract \
         p7zip-full \
+        zenity \
     && rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
