@@ -1,28 +1,42 @@
 # Оптимизированная версия Dockerfile для Railway с фиксом mfc140u.dll и оптимизацией памяти
-FROM ubuntu:22.04
+# Используем альтернативные источники образов для надежности
+FROM --platform=linux/amd64 debian:bullseye-slim
+
+# Альтернативные варианты базового образа (раскомментируйте нужный):
+# FROM --platform=linux/amd64 ubuntu:22.04
+# FROM --platform=linux/amd64 registry.gitlab.com/nvidia/container-images/ubuntu:22.04
+# FROM --platform=linux/amd64 public.ecr.aws/ubuntu/ubuntu:22.04
 
 # Предотвращаем интерактивные запросы
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Добавляем альтернативные репозитории для надежности
+RUN echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian-security bullseye-security main" >> /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian bullseye-updates main" >> /etc/apt/sources.list
+
 # Устанавливаем только необходимые системные зависимости в одном слое
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     curl \
     gcc \
     g++ \
     libc6-dev \
-    libssl3 \
+    libssl1.1 \
     python3 \
     python3-pip \
     git \
     make \
     pkg-config \
+    ca-certificates \
+    gnupg \
+    lsb-release \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/*
 
-# Устанавливаем Node.js 18 (минимальная установка)
+# Устанавливаем Node.js 18 (используем альтернативный источник)
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/* && \
@@ -44,10 +58,12 @@ RUN curl -fsSL https://bun.sh/install | bash && \
 # УСТАНОВКА WINE и необходимых библиотек (оптимизированная)
 RUN echo "=== INSTALLING WINE and dependencies ===" && \
     dpkg --add-architecture i386 && \
+    wget -nc https://dl.winehq.org/wine-builds/winehq.key && \
+    apt-key add winehq.key && \
+    echo "deb https://dl.winehq.org/wine-builds/debian/ bullseye main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        wine \
-        wine32 \
+        winehq-stable \
         xvfb \
         winetricks \
         cabextract \
@@ -87,10 +103,12 @@ RUN echo "=== SETTING UP WINE AND VISUAL C++ LIBRARIES ===" && \
     echo "Initializing wine..." && \
     wineboot --init && \
     sleep 5 && \
-    # Скачиваем Visual C++ Redistributable 2015-2019 напрямую
+    # Скачиваем Visual C++ Redistributable 2015-2019 с альтернативных источников
     echo "Downloading Visual C++ Redistributable..." && \
-    wget -q -O /tmp/vc_redist.x86.exe "https://aka.ms/vs/16/release/vc_redist.x86.exe" && \
-    wget -q -O /tmp/vc_redist.x64.exe "https://aka.ms/vs/16/release/vc_redist.x64.exe" && \
+    (wget -q -O /tmp/vc_redist.x86.exe "https://aka.ms/vs/16/release/vc_redist.x86.exe" || \
+     wget -q -O /tmp/vc_redist.x86.exe "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x86.exe") && \
+    (wget -q -O /tmp/vc_redist.x64.exe "https://aka.ms/vs/16/release/vc_redist.x64.exe" || \
+     wget -q -O /tmp/vc_redist.x64.exe "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe") && \
     # Устанавливаем VC++ Redistributable в тихом режиме
     echo "Installing Visual C++ Redistributable x86..." && \
     wine /tmp/vc_redist.x86.exe /quiet /norestart && \
@@ -98,18 +116,6 @@ RUN echo "=== SETTING UP WINE AND VISUAL C++ LIBRARIES ===" && \
     echo "Installing Visual C++ Redistributable x64..." && \
     wine /tmp/vc_redist.x64.exe /quiet /norestart && \
     sleep 10 && \
-    # Альтернативный метод: скачиваем mfc140u.dll напрямую
-    echo "Downloading mfc140u.dll directly..." && \
-    wget -q -O /tmp/mfc140u_x86.dll "https://github.com/microsoft/vcpkg/raw/master/ports/vcpkg-cmake-get-vars/mfc140u.dll" || \
-    wget -q -O /tmp/mfc140u_x86.dll "https://www.dll-files.com/download/mfc140u.dll.html?c=bVE4cGNoOHJOdGhNeHpVMm5Hc1R5Zz09" || \
-    curl -L -o /tmp/mfc140u_x86.dll "https://files.githubusercontent.com/microsoft/vcpkg/master/ports/vcpkg-cmake-get-vars/mfc140u.dll" || \
-    echo "Failed to download mfc140u.dll from external sources" && \
-    # Копируем DLL в нужные места
-    if [ -f "/tmp/mfc140u_x86.dll" ]; then \
-        cp /tmp/mfc140u_x86.dll /root/.wine/drive_c/windows/system32/mfc140u.dll && \
-        cp /tmp/mfc140u_x86.dll /root/.wine/drive_c/windows/syswow64/mfc140u.dll && \
-        echo "mfc140u.dll installed manually"; \
-    fi && \
     # Дополнительно устанавливаем через winetricks как fallback
     echo "Installing additional components via winetricks..." && \
     winetricks --unattended vcrun2019 mfc140 && \
@@ -119,7 +125,7 @@ RUN echo "=== SETTING UP WINE AND VISUAL C++ LIBRARIES ===" && \
     ls -la /root/.wine/drive_c/windows/system32/ | grep -E "(mfc140|vcruntime)" && \
     ls -la /root/.wine/drive_c/windows/syswow64/ | grep -E "(mfc140|vcruntime)" && \
     # Очистка
-    rm -f /tmp/vc_redist.* /tmp/mfc140u_*.dll && \
+    rm -f /tmp/vc_redist.* && \
     pkill Xvfb || true && \
     sleep 1
 
@@ -238,8 +244,10 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo '    MFC140_FOUND=true' >> /app/start_server.sh && \
     echo 'else' >> /app/start_server.sh && \
     echo '    echo "❌ mfc140u.dll NOT FOUND - attempting emergency fix"' >> /app/start_server.sh && \
-    echo '    # Попытка экстренного восстановления' >> /app/start_server.sh && \
-    echo '    wget -q -O /tmp/emergency_mfc140u.dll "https://www.dllme.com/dll/download/29939/mfc140u.dll" || true' >> /app/start_server.sh && \
+    echo '    # Попытка экстренного восстановления через альтернативные источники' >> /app/start_server.sh && \
+    echo '    (wget -q -O /tmp/emergency_mfc140u.dll "https://files.000webhost.com/files/279990/mfc140u.dll" || \\' >> /app/start_server.sh && \
+    echo '     curl -L -o /tmp/emergency_mfc140u.dll "https://github.com/nalexandru/api-ms-win-core-path-HACK/raw/master/dll/mfc140u.dll" || \\' >> /app/start_server.sh && \
+    echo '     echo "All emergency sources failed") && \\' >> /app/start_server.sh && \
     echo '    if [ -f "/tmp/emergency_mfc140u.dll" ]; then' >> /app/start_server.sh && \
     echo '        cp /tmp/emergency_mfc140u.dll /root/.wine/drive_c/windows/system32/mfc140u.dll' >> /app/start_server.sh && \
     echo '        cp /tmp/emergency_mfc140u.dll /root/.wine/drive_c/windows/syswow64/mfc140u.dll' >> /app/start_server.sh && \
