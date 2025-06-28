@@ -178,10 +178,24 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo 'echo "✅ Found tgstation.dmb"' >> /app/start_server.sh && \
     echo 'ls -lh tgstation.dmb' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
+    echo '# Очищаем старые X-серверы и блокировки' >> /app/start_server.sh && \
+    echo 'echo "🧹 Cleaning up old X servers..."' >> /app/start_server.sh && \
+    echo 'pkill Xvfb || true' >> /app/start_server.sh && \
+    echo 'rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 || true' >> /app/start_server.sh && \
+    echo 'sleep 1' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
     echo '# Запускаем виртуальный дисплей' >> /app/start_server.sh && \
     echo 'echo "🖥️  Starting virtual display..."' >> /app/start_server.sh && \
-    echo 'Xvfb :99 -screen 0 1024x768x16 &' >> /app/start_server.sh && \
+    echo 'Xvfb :99 -screen 0 1024x768x16 -ac &' >> /app/start_server.sh && \
+    echo 'XVFB_PID=$!' >> /app/start_server.sh && \
     echo 'sleep 3' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
+    echo '# Проверяем что X-сервер запустился' >> /app/start_server.sh && \
+    echo 'if ! pgrep Xvfb > /dev/null; then' >> /app/start_server.sh && \
+    echo '    echo "❌ ERROR: Failed to start Xvfb"' >> /app/start_server.sh && \
+    echo '    exit 1' >> /app/start_server.sh && \
+    echo 'fi' >> /app/start_server.sh && \
+    echo 'echo "✅ Virtual display started (PID: $XVFB_PID)"' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
     echo '# Ищем DreamDaemon' >> /app/start_server.sh && \
     echo 'DAEMON_PATH=$(find /usr/local -name "dreamdaemon" -type f 2>/dev/null | head -1)' >> /app/start_server.sh && \
@@ -196,7 +210,16 @@ RUN echo '#!/bin/bash' > /app/start_server.sh && \
     echo '# Создаем директории для логов' >> /app/start_server.sh && \
     echo 'mkdir -p /app/data/logs' >> /app/start_server.sh && \
     echo '' >> /app/start_server.sh && \
+    echo '# Функция очистки при завершении' >> /app/start_server.sh && \
+    echo 'cleanup() {' >> /app/start_server.sh && \
+    echo '    echo "🛑 Shutting down..."' >> /app/start_server.sh && \
+    echo '    kill $XVFB_PID 2>/dev/null || true' >> /app/start_server.sh && \
+    echo '    exit 0' >> /app/start_server.sh && \
+    echo '}' >> /app/start_server.sh && \
+    echo 'trap cleanup SIGTERM SIGINT' >> /app/start_server.sh && \
+    echo '' >> /app/start_server.sh && \
     echo '# Запускаем сервер' >> /app/start_server.sh && \
+    echo 'echo "🚀 Launching DreamDaemon..."' >> /app/start_server.sh && \
     echo 'exec "$DAEMON_PATH" tgstation.dmb -port $PORT -trusted -verbose' >> /app/start_server.sh && \
     chmod +x /app/start_server.sh
 
